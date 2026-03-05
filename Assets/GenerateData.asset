@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b60f3926ea6eb2446b861c27dd76802b, type: 3}
+  m_Name: GenerateData
+  m_EditorClassIdentifier: 
+  generateLists:
+  - Garbage: {fileID: 1709254077376921, guid: 43b84e611fc9c7840a7dc264a05e1e23, type: 3}
+    maxGarbageCount: 5
+    currentGarbageCount: 2
+    RangeMin: 2
+    RangeMax: 8
