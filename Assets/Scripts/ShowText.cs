@@ -16,13 +16,67 @@ public class ShowText : MonoBehaviour
 	}
 
 	// Token: 0x0600006F RID: 111 RVA: 0x00004086 File Offset: 0x00002286
-	public void ShowTexts(string[] strings)
+	public class TextJob
 	{
-		this._queue.Enqueue(strings);
+		public string[] strings;
+		public Action onComplete;
+	}
+
+	private Queue<TextJob> _queue = new Queue<TextJob>();
+
+	public void ShowTexts(string[] strings, Action onComplete = null)
+	{
+		if (strings == null) return;
+		this._queue.Enqueue(new TextJob { strings = strings, onComplete = onComplete });
 		if (this._queue.Count == 1)
 		{
 			base.StartCoroutine(this.ShowTestTexts());
 		}
+	}
+
+	public void PlayConfigText(string resourcePath, Action onComplete = null)
+	{
+		TextAsset textAsset = Resources.Load<TextAsset>(resourcePath);
+		if (textAsset != null)
+		{
+			StartCoroutine(PlayTextRoutine(textAsset.text, onComplete));
+		}
+		else
+		{
+			Debug.LogWarning("Text configuration not found: " + resourcePath);
+			onComplete?.Invoke();
+		}
+	}
+
+	private IEnumerator PlayTextRoutine(string text, Action onComplete)
+	{
+		_textMeshPro.text = "";
+		string[] lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+		
+		foreach (string line in lines)
+		{
+			if (line == ",")
+			{
+				yield return new WaitForSecondsRealtime(1f);
+			}
+			else if (line == ".")
+			{
+				_textMeshPro.text = "";
+				AudioManager.Instance.PlaySFXWithRandomPitch("打字", 0.8f, 1.2f);
+				yield return new WaitForSecondsRealtime(0.06f);
+			}
+			else
+			{
+				foreach (char c in line)
+				{
+					_textMeshPro.text += c.ToString();
+					AudioManager.Instance.PlaySFXWithRandomPitch("打字", 0.8f, 1.2f);
+					yield return new WaitForSecondsRealtime(0.06f);
+				}
+				_textMeshPro.text += "\n";
+			}
+		}
+		onComplete?.Invoke();
 	}
 
 	// Token: 0x06000070 RID: 112 RVA: 0x000040AF File Offset: 0x000022AF
@@ -30,7 +84,8 @@ public class ShowText : MonoBehaviour
 	{
 		while (this._queue.Count > 0)
 		{
-			string[] strings = this._queue.Peek();
+			TextJob job = this._queue.Peek();
+			string[] strings = job.strings;
 			int num;
 			for (int i = 0; i < strings.Length; i = num + 1)
 			{
@@ -60,6 +115,7 @@ public class ShowText : MonoBehaviour
 				}
 				num = i;
 			}
+			job.onComplete?.Invoke();
 			this._queue.Dequeue();
 			strings = null;
 		}
@@ -70,5 +126,5 @@ public class ShowText : MonoBehaviour
 	private TextMeshProUGUI _textMeshPro;
 
 	// Token: 0x0400005A RID: 90
-	private Queue<string[]> _queue = new Queue<string[]>();
+	// 移除了 private Queue<string[]> _queue = new Queue<string[]>(); 来避免报错
 }
