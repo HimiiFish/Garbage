@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: GenerateData
   m_EditorClassIdentifier: 
   generateLists:
-  - Garbage: {fileID: 1709254077376921, guid: 43b84e611fc9c7840a7dc264a05e1e23, type: 3}
+  - Garbage: {fileID: 1709254077376921, guid: e71435c879d091e419a7123ee4f1db31, type: 3}
     maxGarbageCount: 5
     currentGarbageCount: 2
     RangeMin: 2

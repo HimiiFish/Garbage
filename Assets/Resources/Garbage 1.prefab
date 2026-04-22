@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 4730242686860875}
   - component: {fileID: 212724804207875695}
   - component: {fileID: 61618682377417806}
-  - component: {fileID: 4093230079344686662}
+  - component: {fileID: 114703437598541787}
   m_Layer: 0
   m_Name: Garbage 1
   m_TagString: Garbage
@@ -54,7 +54,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10306, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 6d35de1917aa08643ba3509a899fcab6, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -80,7 +80,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 3.65, y: 4.05}
+  m_Size: {x: 1, y: 1}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -104,7 +104,7 @@ BoxCollider2D:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
     oldSize: {x: 3.65, y: 4.05}
-    newSize: {x: 3.65, y: 4.05}
+    newSize: {x: 1, y: 1}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
@@ -112,7 +112,7 @@ BoxCollider2D:
   serializedVersion: 2
   m_Size: {x: 1, y: 1}
   m_EdgeRadius: 0
---- !u!114 &4093230079344686662
+--- !u!114 &114703437598541787
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -124,5 +124,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a2382d224172b8e479ae767756a849c3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GarbageName: Star
-  GarbageValue: 2
+  GarbageName: 1
+  GarbageValue: 5

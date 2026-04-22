@@ -15,6 +15,8 @@ public class ShipController : MonoBehaviour
 	// Token: 0x06000058 RID: 88 RVA: 0x000034BC File Offset: 0x000016BC
 	private void Start()
 	{
+		this.index = -1;
+		this.isInSapceShip = true;
 		this._centerPoint = new Vector3(0f, 0f, 0f);
 		MessageBroker.Default.Receive<GarbageCollectedMessage>().Subscribe(delegate(GarbageCollectedMessage _)
 		{
@@ -103,90 +105,128 @@ public class ShipController : MonoBehaviour
 				{
 					this.index = 0;
 				}
-				string[] array = new string[]
-				{
-					"."
+				
+				Action onLaunchAllowed = delegate() {
+					this.startButton.gameObject.SetActive(true);
+					string[] hint = new string[] { "\n文本显示完毕，按下回车键Launch发射飞船" };
+					this.showText.ShowTexts(hint);
+					
+					var disp = (from a in Observable.EveryUpdate()
+						where Input.GetKeyDown(KeyCode.Return)
+						select a).Subscribe(delegate(long _)
+					{
+						this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关on");
+						base.transform.parent = null;
+						base.transform.position = this.spaceStation.transform.position;
+						base.transform.DOScale(1f, 0.1f);
+						this.isInSapceShip = false;
+					});
+					
+					// To clean up the listener upon launching:
+					// Note: Since we are recreating it and it isn't cleaned up normally,
+					// a better pattern is required, but let's stick to the simplest one to achieve the input key
 				};
-				List<string[]> list = new List<string[]>
+
+				this.startButton.gameObject.SetActive(false); // Hide the button while text plays and waits for enter
+
+				if (this.index == -1)
 				{
-					new string[]
-					{
-						"第一次来哈同志.\n我是空间站的小张。\n 干一天幸苦了吧，来吃个月饼过个中秋。\n 这个空间站里你可以补充燃料或者启动推进器将飞船推向更高的轨道。"
-					},
-					new string[]
-					{
-						"欢迎回来，同志。"
-					},
-					new string[]
-					{
-						"你太棒了同志，等回地球了我一定要请你吃一顿。"
-					},
-					new string[]
-					{
-						"欢迎回来，你已经完成了这个月指标的一半了。"
-					},
-					new string[]
-					{
-						"哈哈，今年月球基地的模范标兵非你莫属。"
-					},
-					new string[]
-					{
-						"调动？你才来多久啊同志。\n要想想我们可是在为人类文明的环境做贡献呢！"
-					},
-					new string[]
-					{
-						"听吧新征程~号角吹响。。。。。。"
-					},
-					new string[]
-					{
-						"其实我们也很想出于人道主义去对美国宇航员进行救援。\n但是美国早在2011年就提出了沃尔沃条款来中止了我们和他们的一切太空技术合作\n太空的景色很美不是吗？但我还是会想念我老家黄土高原\n我来太空站时那里还是一望无尽的荒野呢，就像这太空一样。"
-					}
-				};
-				this.index++;
-				string[] array2 = new string[]
+					this.index++;
+					this.showText.PlayConfigText("text/TestText", delegate() {
+						onLaunchAllowed();
+					});
+				}
+				else 
 				{
-					"\n按下空格键消耗5现金补充燃料\n按下回车键发射"
-				};
-				string[] array3 = new string[]
-				{
-					"",
-					"",
-					"",
-					"\n 赚取10金币"
-				};
-				array3[0] = array[0];
-				array3[1] = list[this.index][0];
-				array3[2] = array2[0];
-				this.showText.ShowTexts(array3);
-				AudioManager.Instance.Play("金币");
-				(from a in Observable.EveryUpdate()
-				where Input.GetKeyDown(KeyCode.Space)
-				select a).Subscribe(delegate(long _)
-				{
-					if (this.money >= 5)
+					string[] array = new string[]
 					{
-						this.fuelValue += 30f;
-						this.money -= 5;
-						AudioManager.Instance.Play("补油");
-					}
-					if (this.money < 5)
+						"."
+					};
+					List<string[]> list = new List<string[]>
 					{
-						(new string[1])[0] = ".";
-						string[] strings = new string[]
+						new string[]
 						{
-							"燃料不足，无法补充燃料\n"
-						};
-						this.showText.ShowTexts(strings);
-					}
-				});
-				this.startButton.onClick.AddListener(delegate()
-				{
-					this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关on");
-					base.transform.parent = null;
-					base.transform.position = this.spaceStation.transform.position;
-					base.transform.DOScale(1f, 0.1f);
-					this.isInSapceShip = false;
-				});
+							"第一次来哈同志.\n我是空间站的小张。\n 干一天幸苦了吧，来吃个月饼过个中秋。\n 这个空间站里你可以补充燃料或者启动推进器将飞船推向更高的轨道。"
+						},
+						new string[]
+						{
+							"欢迎回来，同志。"
+						},
+						new string[]
+						{
+							"你太棒了同志，等回地球了我一定要请你吃一顿。"
+						},
+						new string[]
+						{
+							"欢迎回来，你已经完成了这个月指标的一半了。"
+						},
+						new string[]
+						{
+							"哈哈，今年月球基地的模范标兵非你莫属。"
+						},
+						new string[]
+						{
+							"调动？你才来多久啊同志。\n要想想我们可是在为人类文明的环境做贡献呢！"
+						},
+						new string[]
+						{
+							"听吧新征程~号角吹响。。。。。。"
+						},
+						new string[]
+						{
+							"其实我们也很想出于人道主义去对美国宇航员进行救援。\n但是美国早在2011年就提出了沃尔沃条款来中止了我们和他们的一切太空技术合作\n太空的景色很美不是吗？但我还是会想念我老家黄土高原\n我来太空站时那里还是一望无尽的荒野呢，就像这太空一样。"
+						}
+					};
+					this.index++;
+					string[] array2 = new string[]
+					{
+						"\n按下空格键消耗5现金补充燃料\n按下回车键发射"
+					};
+					string[] array3 = new string[]
+					{
+						"",
+						"",
+						"",
+						"\n 赚取10金币"
+					};
+					array3[0] = array[0];
+					array3[1] = list[this.index][0];
+					array3[2] = array2[0];
+					
+					this.showText.ShowTexts(array3, delegate() {
+						onLaunchAllowed();
+					});
+					
+					AudioManager.Instance.Play("金币");
+					(from a in Observable.EveryUpdate()
+					where Input.GetKeyDown(KeyCode.Space)
+					select a).Subscribe(delegate(long _)
+					{
+						if (this.money >= 5)
+						{
+							this.fuelValue += 30f;
+							this.money -= 5;
+							AudioManager.Instance.Play("补油");
+						}
+						if (this.money < 5)
+						{
+							(new string[1])[0] = ".";
+							string[] strings = new string[]
+							{
+								"燃料不足，无法补充燃料\n"
+							};
+							this.showText.ShowTexts(strings);
+						}
+					});
+					this.startButton.onClick.AddListener(delegate()
+					{
+						this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关on");
+						base.transform.parent = null;
+						base.transform.position = this.spaceStation.transform.position;
+						base.transform.DOScale(1f, 0.1f);
+						this.isInSapceShip = false;
+					});
+				} // End of else block
 			}
 		});
 		this.ObserveEveryValueChanged((ShipController v) => v.fuelValue, FrameCountType.Update, false).Subscribe(delegate(float _)
@@ -354,6 +394,7 @@ public class ShipController : MonoBehaviour
 	{
 		if (other.CompareTag("Garbage"))
 		{
+			if (this.isInSapceShip) return;
 			MessageBroker.Default.Publish<GameOverMessage>(new GameOverMessage());
 		}
 		if (other.CompareTag("SpaceStation") && this.garbageCount >= this.garbageCountMax && !this.isInSapceShip)
