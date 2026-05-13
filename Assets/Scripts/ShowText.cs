@@ -7,6 +7,16 @@ using UnityEngine;
 // Token: 0x0200001C RID: 28
 public class ShowText : MonoBehaviour
 {
+	private bool _skipCurrentDialogue;
+
+	private void Update()
+	{
+		if (Input.GetKeyDown(KeyCode.T))
+		{
+			this._skipCurrentDialogue = true;
+		}
+	}
+
 	// Token: 0x0600006E RID: 110 RVA: 0x00004062 File Offset: 0x00002262
 	private void Start()
 	{
@@ -48,6 +58,19 @@ public class ShowText : MonoBehaviour
 		}
 	}
 
+	private IEnumerator WaitSkippable(float seconds)
+	{
+		float end = Time.realtimeSinceStartup + seconds;
+		while (Time.realtimeSinceStartup < end)
+		{
+			if (this._skipCurrentDialogue)
+			{
+				yield break;
+			}
+			yield return null;
+		}
+	}
+
 	private IEnumerator PlayTextRoutine(string text, Action onComplete)
 	{
 		_textMeshPro.text = "";
@@ -55,23 +78,53 @@ public class ShowText : MonoBehaviour
 		
 		foreach (string line in lines)
 		{
+			if (this._skipCurrentDialogue)
+			{
+				this._skipCurrentDialogue = false;
+				onComplete?.Invoke();
+				yield break;
+			}
 			if (line == ",")
 			{
-				yield return new WaitForSecondsRealtime(1f);
+				yield return StartCoroutine(this.WaitSkippable(1f));
+				if (this._skipCurrentDialogue)
+				{
+					this._skipCurrentDialogue = false;
+					onComplete?.Invoke();
+					yield break;
+				}
 			}
 			else if (line == ".")
 			{
 				_textMeshPro.text = "";
 				AudioManager.Instance.PlaySFXWithRandomPitch("打字", 0.8f, 1.2f);
-				yield return new WaitForSecondsRealtime(0.06f);
+				yield return StartCoroutine(this.WaitSkippable(0.06f));
+				if (this._skipCurrentDialogue)
+				{
+					this._skipCurrentDialogue = false;
+					onComplete?.Invoke();
+					yield break;
+				}
 			}
 			else
 			{
 				foreach (char c in line)
 				{
+					if (this._skipCurrentDialogue)
+					{
+						this._skipCurrentDialogue = false;
+						onComplete?.Invoke();
+						yield break;
+					}
 					_textMeshPro.text += c.ToString();
 					AudioManager.Instance.PlaySFXWithRandomPitch("打字", 0.8f, 1.2f);
-					yield return new WaitForSecondsRealtime(0.06f);
+					yield return StartCoroutine(this.WaitSkippable(0.06f));
+					if (this._skipCurrentDialogue)
+					{
+						this._skipCurrentDialogue = false;
+						onComplete?.Invoke();
+						yield break;
+					}
 				}
 				_textMeshPro.text += "\n";
 			}
@@ -89,32 +142,57 @@ public class ShowText : MonoBehaviour
 			int num;
 			for (int i = 0; i < strings.Length; i = num + 1)
 			{
+				if (this._skipCurrentDialogue)
+				{
+					this._skipCurrentDialogue = false;
+					break;
+				}
 				if (strings[i].Contains(","))
 				{
-					yield return new WaitForSecondsRealtime(1f);
+					yield return StartCoroutine(this.WaitSkippable(1f));
+					if (this._skipCurrentDialogue)
+					{
+						this._skipCurrentDialogue = false;
+						break;
+					}
 				}
 				else if (strings[i].Contains("."))
 				{
 					this._textMeshPro.text = "";
 					AudioManager.Instance.PlaySFXWithRandomPitch("打字", 0.8f, 1.2f);
-					yield return new WaitForSecondsRealtime(0.06f);
+					yield return StartCoroutine(this.WaitSkippable(0.06f));
+					if (this._skipCurrentDialogue)
+					{
+						this._skipCurrentDialogue = false;
+						break;
+					}
 				}
 				else
 				{
 					foreach (char c in strings[i])
 					{
+						if (this._skipCurrentDialogue)
+						{
+							this._skipCurrentDialogue = false;
+							goto SkipJob;
+						}
 						TextMeshProUGUI textMeshPro = this._textMeshPro;
 						textMeshPro.text += c.ToString();
 						AudioManager.Instance.PlaySFXWithRandomPitch("打字", 0.8f, 1.2f);
-						yield return new WaitForSecondsRealtime(0.06f);
+						yield return StartCoroutine(this.WaitSkippable(0.06f));
+						if (this._skipCurrentDialogue)
+						{
+							this._skipCurrentDialogue = false;
+							goto SkipJob;
+						}
 					}
-					string text = null;
 					TextMeshProUGUI textMeshPro2 = this._textMeshPro;
 					textMeshPro2.text += "\n";
 					AudioManager.Instance.PlaySFXWithRandomPitch("打字", 0.8f, 1.2f);
 				}
 				num = i;
 			}
+		SkipJob:
 			job.onComplete?.Invoke();
 			this._queue.Dequeue();
 			strings = null;

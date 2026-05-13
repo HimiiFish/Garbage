@@ -72,6 +72,7 @@ public class GrapnelController : MonoBehaviour
 	// Token: 0x06000044 RID: 68 RVA: 0x000030EC File Offset: 0x000012EC
 	private IEnumerator GrapnelLogicCoroutine(Vector3 targetVector, int distance)
 	{
+		this._grabbedMass = 1f;
 		AudioManager.Instance.Play("狗爪伸出去");
 		float time = 0f;
 		Vector3 fixedDistanceVector = targetVector * (float)distance;
@@ -89,11 +90,11 @@ public class GrapnelController : MonoBehaviour
 		{
 			if (this._isGrab)
 			{
-				recoveryTime += Time.deltaTime / 200f;
+				recoveryTime += Time.deltaTime / (200f * this._grabbedMass);
 			}
 			else
 			{
-				recoveryTime += Time.deltaTime / 50f;
+				recoveryTime += Time.deltaTime / (50f * this._grabbedMass);
 			}
 			base.transform.position = Vector3.Lerp(base.transform.position, this._centerPoint, recoveryTime);
 			yield return null;
@@ -102,6 +103,7 @@ public class GrapnelController : MonoBehaviour
 		base.transform.position = this._centerPoint + normalized * this.grapnelRadius.magnitude;
 		this._isCrawl = false;
 		this._isGrab = false;
+		this._grabbedMass = 1f;
 		base.transform.GetChild(0).GetComponent<SpriteRenderer>().sprite = Resources.Load<Sprite>("Sprites/狗爪开");
 		MessageBroker.Default.Publish<GarbageCollectedMessage>(new GarbageCollectedMessage());
 		IEnumerator enumerator = base.transform.GetEnumerator();
@@ -111,10 +113,17 @@ public class GrapnelController : MonoBehaviour
 			Transform transform = (Transform)obj;
 			if (transform.CompareTag("Garbage"))
 			{
-				Object.Destroy(transform.gameObject);
+				transform.SetParent(null, true);
+				if (GenerateManager.Instance != null)
+				{
+					GenerateManager.Instance.ReleaseGarbage(transform.gameObject);
+				}
+				else
+				{
+					Object.Destroy(transform.gameObject);
+				}
 			}
 		}
-		yield break;
 		yield break;
 	}
 
@@ -124,11 +133,20 @@ public class GrapnelController : MonoBehaviour
 		if (other.CompareTag("Garbage") && this._isCrawl)
 		{
 			this._isGrab = true;
+			Garabage garabage = other.GetComponent<Garabage>();
+			this._grabbedMass = garabage != null ? Mathf.Clamp(garabage.RuntimeMass, 0.35f, 6f) : 1f;
 			other.transform.parent = base.transform;
-			other.GetComponent<RotateObject>().enabled = false;
+			RotateObject rotateObject = other.GetComponent<RotateObject>();
+			if (rotateObject != null)
+			{
+				rotateObject.enabled = false;
+			}
 			AudioManager.Instance.Play("抓取");
 			other.transform.DOPunchScale(new Vector3(0.6f, 0.6f, 0.6f), 0.2f, 10, 1f);
-			Object.Destroy(other.GetComponent<Collider2D>());
+			foreach (Collider2D collider2D in other.GetComponentsInChildren<Collider2D>(true))
+			{
+				collider2D.enabled = false;
+			}
 		}
 	}
 
@@ -140,6 +158,8 @@ public class GrapnelController : MonoBehaviour
 
 	// Token: 0x0400002E RID: 46
 	private bool _isGrab;
+
+	private float _grabbedMass = 1f;
 
 	// Token: 0x0400002F RID: 47
 	[SerializeField]

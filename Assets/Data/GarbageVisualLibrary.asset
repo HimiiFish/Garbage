@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3f8a91b2d4e5647a9b0c1d2e3f45678, type: 3}
+  m_Name: GarbageVisualLibrary
+  m_EditorClassIdentifier: 
+  wasteSprites:
+  - {fileID: 21300000, guid: cc9cc3a70bc6f564bb50c25387926e45, type: 3}
+  - {fileID: 21300000, guid: 1587649e0e6ec0e4b86c6265e6459ec3, type: 3}
+  - {fileID: 21300000, guid: 2f0b3402687c94e45923dce5c45763ab, type: 3}

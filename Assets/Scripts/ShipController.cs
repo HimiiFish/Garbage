@@ -12,6 +12,8 @@ using Random = UnityEngine.Random;
 // Token: 0x02000019 RID: 25
 public class ShipController : MonoBehaviour
 {
+	private CompositeDisposable _enableLifetime;
+
 	// Token: 0x06000058 RID: 88 RVA: 0x000034BC File Offset: 0x000016BC
 	private void Start()
 	{
@@ -87,9 +89,42 @@ public class ShipController : MonoBehaviour
 		}).AddTo(this);
 	}
 
+	public void ApplyFlyingVisualState()
+	{
+		base.transform.DOKill(false);
+		base.transform.SetParent(null);
+		base.transform.localScale = Vector3.one;
+		this.isInSapceShip = false;
+		this.SetDockedVisuals(false);
+	}
+
+	private void SetDockedVisuals(bool docked)
+	{
+		foreach (TrailRenderer trailRenderer in base.GetComponentsInChildren<TrailRenderer>(true))
+		{
+			if (docked)
+			{
+				trailRenderer.emitting = false;
+				trailRenderer.Clear();
+			}
+			else
+			{
+				trailRenderer.Clear();
+				trailRenderer.emitting = true;
+			}
+		}
+		LineRenderer lineRenderer = base.GetComponent<LineRenderer>();
+		if (lineRenderer != null)
+		{
+			lineRenderer.enabled = !docked;
+		}
+	}
+
 	// Token: 0x06000059 RID: 89 RVA: 0x000034FC File Offset: 0x000016FC
 	private void OnEnable()
 	{
+		this._enableLifetime?.Dispose();
+		this._enableLifetime = new CompositeDisposable();
 		this.orbitRadius = base.transform.position - this._centerPoint;
 		this.ObserveEveryValueChanged((ShipController v) => v.isInSapceShip, FrameCountType.Update, false).Subscribe(delegate(bool _)
 		{
@@ -98,6 +133,7 @@ public class ShipController : MonoBehaviour
 				this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关off");
 				base.transform.parent = this.spaceStation.transform;
 				base.transform.DOScale(Vector3.zero, 0.1f);
+				this.SetDockedVisuals(true);
 				this.money += 10;
 				this.garbageCount = 0;
 				MessageBroker.Default.Publish<GenerateGarbageMessage>(new GenerateGarbageMessage());
@@ -111,7 +147,7 @@ public class ShipController : MonoBehaviour
 					string[] hint = new string[] { "\n文本显示完毕，按下回车键Launch发射飞船" };
 					this.showText.ShowTexts(hint);
 					
-					var disp = (from a in Observable.EveryUpdate()
+					(from a in Observable.EveryUpdate()
 						where Input.GetKeyDown(KeyCode.Return)
 						select a).Subscribe(delegate(long _)
 					{
@@ -120,7 +156,8 @@ public class ShipController : MonoBehaviour
 						base.transform.position = this.spaceStation.transform.position;
 						base.transform.DOScale(1f, 0.1f);
 						this.isInSapceShip = false;
-					});
+						this.SetDockedVisuals(false);
+					}).AddTo(this);
 					
 					// To clean up the listener upon launching:
 					// Note: Since we are recreating it and it isn't cleaned up normally,
@@ -217,7 +254,7 @@ public class ShipController : MonoBehaviour
 							};
 							this.showText.ShowTexts(strings);
 						}
-					});
+					}).AddTo(this._enableLifetime);
 					this.startButton.onClick.AddListener(delegate()
 					{
 						this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关on");
@@ -225,10 +262,11 @@ public class ShipController : MonoBehaviour
 						base.transform.position = this.spaceStation.transform.position;
 						base.transform.DOScale(1f, 0.1f);
 						this.isInSapceShip = false;
+						this.SetDockedVisuals(false);
 					});
 				} // End of else block
 			}
-		});
+		}).AddTo(this._enableLifetime);
 		this.ObserveEveryValueChanged((ShipController v) => v.fuelValue, FrameCountType.Update, false).Subscribe(delegate(float _)
 		{
 			if (this.fuelValue <= 0f && !this.isOver)
@@ -242,7 +280,13 @@ public class ShipController : MonoBehaviour
 				};
 				this.showText.ShowTexts(strings);
 			}
-		});
+		}).AddTo(this._enableLifetime);
+	}
+
+	private void OnDisable()
+	{
+		this._enableLifetime?.Dispose();
+		this._enableLifetime = null;
 	}
 
 	// Token: 0x0600005A RID: 90 RVA: 0x00003598 File Offset: 0x00001798
@@ -255,11 +299,15 @@ public class ShipController : MonoBehaviour
 			this.DownOrbit();
 			this.ComputeOrbitSpeed();
 			this.ShipRotate();
+			this.ApplyBlackHoleAttraction();
 			this.ComputeFuelValue();
 			this.ComputeCameraSize();
 			this.CorrectAcceleration();
 		}
-		this.DrawCircle(this._centerPoint, this.orbitRadius.magnitude);
+		if (!this.isInSapceShip)
+		{
+			this.DrawCircle(this._centerPoint, this.orbitRadius.magnitude);
+		}
 		this.ShipFace();
 	}
 
@@ -331,6 +379,36 @@ public class ShipController : MonoBehaviour
 		base.transform.position = this._centerPoint + this.orbitRadius;
 	}
 
+	private void ApplyBlackHoleAttraction()
+	{
+		if (this.isInSapceShip || !StaticData.isInHole || this.isOver)
+		{
+			return;
+		}
+		Vector3 hole = StaticData.blackHoleWorldPosition;
+		Vector3 toHole = hole - base.transform.position;
+		float dist = toHole.magnitude;
+		if (dist < 1e-4f)
+		{
+			return;
+		}
+		float R = Mathf.Max(StaticData.blackHoleGravityRadius, 0.1f);
+		float depth = Mathf.Clamp01(1f - dist / R);
+		float step = StaticData.blackHolePullSpeed * Time.deltaTime * (0.2f + 0.8f * depth);
+		Vector3 delta = toHole.normalized * Mathf.Min(step, dist * 0.98f);
+		Vector3 newWorld = base.transform.position + delta;
+		base.transform.position = newWorld;
+		this.orbitRadius = newWorld - this._centerPoint;
+	}
+
+	public bool IsDockedInStation
+	{
+		get
+		{
+			return this.isInSapceShip;
+		}
+	}
+
 	// Token: 0x06000060 RID: 96 RVA: 0x000038C0 File Offset: 0x00001AC0
 	private void ComputeOrbitSpeed()
 	{
@@ -395,6 +473,10 @@ public class ShipController : MonoBehaviour
 		if (other.CompareTag("Garbage"))
 		{
 			if (this.isInSapceShip) return;
+			if (other.transform.IsChildOf(base.transform))
+			{
+				return;
+			}
 			MessageBroker.Default.Publish<GameOverMessage>(new GameOverMessage());
 		}
 		if (other.CompareTag("SpaceStation") && this.garbageCount >= this.garbageCountMax && !this.isInSapceShip)

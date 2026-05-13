@@ -3,10 +3,20 @@ using UniRx;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
-// Token: 0x02000017 RID: 23
 public class RotateObject : MonoBehaviour
 {
-	// Token: 0x0600004D RID: 77 RVA: 0x000031EF File Offset: 0x000013EF
+	private void Awake()
+	{
+		if (this.plant == null)
+		{
+			GameObject p = GameObject.Find("Planet");
+			if (p != null)
+			{
+				this.plant = p.GetComponent<Plant>();
+			}
+		}
+	}
+
 	private void Update()
 	{
 		if (base.gameObject.CompareTag("SpaceStation"))
@@ -16,75 +26,138 @@ public class RotateObject : MonoBehaviour
 			return;
 		}
 		this.ComputeOrbitSpeed();
+		if (base.gameObject.CompareTag("Garbage") && this._garbageDecaySpeed > 0f)
+		{
+			float mag = this.orbitRadius.magnitude;
+			if (mag > 0.001f)
+			{
+				float newMag = Mathf.MoveTowards(mag, this._garbageDecayRadiusFloor, this._garbageDecaySpeed * Time.deltaTime);
+				this.orbitRadius = this.orbitRadius.normalized * newMag;
+			}
+		}
 		this.ShipRotate();
 		this.ShipFace();
 	}
 
-	// Token: 0x0600004E RID: 78 RVA: 0x00003224 File Offset: 0x00001424
 	private void HoleRotate()
 	{
-		if (Random.Range(0, 100) < 1)
+		if (this.plant == null)
 		{
-			this._targetOrbitRadius = Random.Range(this.minOrbitRadius, this.maxOrbitRadius);
+			return;
 		}
-		this.orbitSpeed = Mathf.Sqrt(this.plant.gravityCoefficient / this.orbitRadius.magnitude);
-		float d = Mathf.Lerp(this.orbitRadius.magnitude, this._targetOrbitRadius, Time.deltaTime * this.lerpSpeed);
-		this.orbitRadius = (Quaternion.AngleAxis(Time.deltaTime * this.orbitSpeed * 2f, Vector3.forward) * this.orbitRadius).normalized * d;
+		float currentMag = this.orbitRadius.magnitude;
+		if (currentMag < 0.001f)
+		{
+			currentMag = this.minOrbitRadius;
+		}
+		this.orbitSpeed = Mathf.Sqrt(this.plant.gravityCoefficient / currentMag);
+		float smoothedMag = Mathf.SmoothDamp(currentMag, this._targetOrbitRadius, ref this._radiusSmoothVel, this.radiusSmoothTime, Mathf.Infinity, Time.deltaTime);
+		smoothedMag = Mathf.Clamp(smoothedMag, this.minOrbitRadius, this.maxOrbitRadius);
+		float angleStep = Time.deltaTime * this.orbitSpeed * this.spaceStationOrbitVisualScale;
+		this.orbitRadius = (Quaternion.AngleAxis(angleStep, Vector3.forward) * this.orbitRadius).normalized * smoothedMag;
 		base.transform.position = this._centerPoint + this.orbitRadius;
 	}
 
-	// Token: 0x0600004F RID: 79 RVA: 0x000032EF File Offset: 0x000014EF
 	private void ShipFace()
 	{
 		base.transform.rotation = Quaternion.LookRotation(Vector3.forward, this._centerPoint - base.transform.position);
 	}
 
-	// Token: 0x06000050 RID: 80 RVA: 0x0000331C File Offset: 0x0000151C
 	private void Start()
 	{
 		this.plant = GameObject.Find("Planet").GetComponent<Plant>();
+		this._centerPoint = this.plant != null ? this.plant.transform.position : Vector3.zero;
 		this.orbitRadius = base.transform.position - this._centerPoint;
 		this._targetOrbitRadius = this.orbitRadius.magnitude;
-		Observable.Timer(TimeSpan.FromSeconds(10.0)).Repeat<long>().Subscribe(delegate(long _)
+		if (base.gameObject.CompareTag("SpaceStation"))
 		{
-			this._targetOrbitRadius = Random.Range(this.minOrbitRadius, this.maxOrbitRadius);
-		}).AddTo(this);
+			Observable.Timer(TimeSpan.FromSeconds(10.0)).Repeat<long>().Subscribe(delegate(long _)
+			{
+				this._targetOrbitRadius = Random.Range(this.minOrbitRadius, this.maxOrbitRadius);
+			}).AddTo(this);
+		}
 	}
 
-	// Token: 0x06000051 RID: 81 RVA: 0x0000339C File Offset: 0x0000159C
+	public void ResetOrbitStateFromWorld()
+	{
+		if (this.plant == null)
+		{
+			GameObject p = GameObject.Find("Planet");
+			if (p != null)
+			{
+				this.plant = p.GetComponent<Plant>();
+			}
+		}
+		this._centerPoint = this.plant != null ? this.plant.transform.position : Vector3.zero;
+		this.orbitRadius = base.transform.position - this._centerPoint;
+		this._radiusSmoothVel = 0f;
+		this._targetOrbitRadius = this.orbitRadius.magnitude;
+	}
+
+	public void SetGarbageOrbitalDecay(float speedWorldUnitsPerSecond, float innerRadiusFloor)
+	{
+		if (!base.gameObject.CompareTag("Garbage"))
+		{
+			return;
+		}
+		this._garbageDecaySpeed = Mathf.Max(0f, speedWorldUnitsPerSecond);
+		this._garbageDecayRadiusFloor = Mathf.Max(0.5f, innerRadiusFloor);
+	}
+
+	public void ClearGarbageOrbitalDecay()
+	{
+		this._garbageDecaySpeed = 0f;
+	}
+
 	private void ShipRotate()
 	{
+		if (this.plant == null)
+		{
+			return;
+		}
 		this.orbitRadius = Quaternion.AngleAxis(Time.deltaTime * this.orbitSpeed * 2f, Vector3.forward) * this.orbitRadius;
 		base.transform.position = this._centerPoint + this.orbitRadius;
 	}
 
-	// Token: 0x06000052 RID: 82 RVA: 0x000033F2 File Offset: 0x000015F2
 	private void ComputeOrbitSpeed()
 	{
-		this.orbitSpeed = Mathf.Sqrt(this.plant.gravityCoefficient / this.orbitRadius.magnitude);
+		if (this.plant == null)
+		{
+			return;
+		}
+		this.orbitSpeed = Mathf.Sqrt(this.plant.gravityCoefficient / Mathf.Max(this.orbitRadius.magnitude, 0.01f));
 	}
 
-	// Token: 0x04000035 RID: 53
 	private Plant plant;
 
-	// Token: 0x04000036 RID: 54
 	private Vector3 _centerPoint;
 
-	// Token: 0x04000037 RID: 55
 	private Vector3 orbitRadius;
 
-	// Token: 0x04000038 RID: 56
 	private float orbitSpeed;
 
-	// Token: 0x04000039 RID: 57
-	public float minOrbitRadius = 10f;
+	[Tooltip("空间站随机目标半径下限；应明显小于场景中黑洞 minOrbitRadius，否则会与黑洞同高度带重叠。")]
+	public float minOrbitRadius = 4f;
 
-	// Token: 0x0400003A RID: 58
-	public float maxOrbitRadius = 40f;
+	[Tooltip("空间站随机目标半径上限；应小于黑洞轨道带下限，否则定时 Random 会经常抽到与黑洞相近的高度。")]
+	public float maxOrbitRadius = 18f;
 
-	// Token: 0x0400003B RID: 59
 	public float lerpSpeed = 0.1f;
 
-	// Token: 0x0400003C RID: 60
 	private float _targetOrbitRadius;
+
+	private float _radiusSmoothVel;
+
+	private float _garbageDecaySpeed;
+
+	private float _garbageDecayRadiusFloor = 11f;
+
+	[SerializeField]
+	[Tooltip("目标轨道半径变化时的平滑时间（秒），数值越大轨迹越顺")]
+	private float radiusSmoothTime = 2.8f;
+
+	[SerializeField]
+	[Range(0.05f, 1.5f)]
+	[Tooltip("空间站绕行星角速度相对飞船公式的比例；原逻辑为 2×orbitSpeed 易比飞船快太多")]
+	private float spaceStationOrbitVisualScale = 0.42f;
 }

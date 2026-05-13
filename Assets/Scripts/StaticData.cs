@@ -1,4 +1,5 @@
 ﻿using System;
+using UnityEngine;
 
 // Token: 0x0200001E RID: 30
 public static class StaticData
@@ -14,4 +15,10 @@ public static class StaticData
 
 	// Token: 0x0400006A RID: 106
 	public static float coefficient;
+
+	public static Vector3 blackHoleWorldPosition;
+
+	public static float blackHoleGravityRadius = 5f;
+
+	public static float blackHolePullSpeed = 0.55f;
 }

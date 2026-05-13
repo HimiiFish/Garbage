@@ -45,7 +45,9 @@ public class SpaceStation : MonoBehaviour
 	public void Launch()
 	{
 		this.ship.SetActive(true);
-		this.ship.GetComponent<ShipController>().enabled = false;
+		ShipController shipController = this.ship.GetComponent<ShipController>();
+		shipController.enabled = false;
+		shipController.ApplyFlyingVisualState();
 		this.ship.transform.position = base.transform.position;
 		base.StartCoroutine(this.LaunchCoroutine());
 	}
@@ -67,7 +69,9 @@ public class SpaceStation : MonoBehaviour
 			Camera.main.DOOrthoSize(endValue, 0.05f).SetEase(Ease.InOutSine);
 			yield return null;
 		}
-		this.ship.GetComponent<ShipController>().enabled = true;
+		ShipController shipController = this.ship.GetComponent<ShipController>();
+		shipController.ApplyFlyingVisualState();
+		shipController.enabled = true;
 		yield break;
 	}
 
