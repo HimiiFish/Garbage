@@ -14,14 +14,22 @@ public class ShipController : MonoBehaviour
 {
 	private CompositeDisposable _enableLifetime;
 
+	private CompositeDisposable _stationPurchaseDisposable;
+
 	// Token: 0x06000058 RID: 88 RVA: 0x000034BC File Offset: 0x000016BC
 	private void Start()
 	{
+		this._grapnel = base.GetComponentInChildren<GrapnelController>(true);
+		this.RefreshGrapnelUpgrades();
 		this.index = -1;
 		this.isInSapceShip = true;
 		this._centerPoint = new Vector3(0f, 0f, 0f);
 		MessageBroker.Default.Receive<GarbageCollectedMessage>().Subscribe(delegate(GarbageCollectedMessage _)
 		{
+			if (this.isInSapceShip)
+			{
+				return;
+			}
 			this.garbageCount++;
 			if (this.garbageCount >= this.garbageCountMax)
 			{
@@ -125,6 +133,8 @@ public class ShipController : MonoBehaviour
 	{
 		this._enableLifetime?.Dispose();
 		this._enableLifetime = new CompositeDisposable();
+		this._stationPurchaseDisposable?.Dispose();
+		this._stationPurchaseDisposable = null;
 		this.orbitRadius = base.transform.position - this._centerPoint;
 		this.ObserveEveryValueChanged((ShipController v) => v.isInSapceShip, FrameCountType.Update, false).Subscribe(delegate(bool _)
 		{
@@ -144,7 +154,7 @@ public class ShipController : MonoBehaviour
 				
 				Action onLaunchAllowed = delegate() {
 					this.startButton.gameObject.SetActive(true);
-					string[] hint = new string[] { "\n文本显示完毕，按下回车键Launch发射飞船" };
+					string[] hint = new string[] { "\n文本显示完毕，按下回车键Launch发射飞船\n（停靠期间可按空格补燃料，按1/2/3购买升级）" };
 					this.showText.ShowTexts(hint);
 					
 					(from a in Observable.EveryUpdate()
@@ -165,6 +175,8 @@ public class ShipController : MonoBehaviour
 				};
 
 				this.startButton.gameObject.SetActive(false); // Hide the button while text plays and waits for enter
+
+				this.RegisterStationPurchaseInputs();
 
 				if (this.index == -1)
 				{
@@ -217,7 +229,18 @@ public class ShipController : MonoBehaviour
 					this.index++;
 					string[] array2 = new string[]
 					{
-						"\n按下空格键消耗5现金补充燃料\n按下回车键发射"
+						string.Format("\n按下空格键消耗5现金补充燃料\n按数字键1：轨道环绕速度升级（{0}$，当前Lv{1}/{2}，每级约+6%环绕角速度）\n按数字键2：钩爪伸出/回收速度升级（{3}$，当前Lv{4}/{5}）\n按数字键3：钩爪长度升级（{6}$，当前Lv{7}/{8}，增加伸出距离与待机半径）\n按下回车键发射", new object[]
+						{
+							8,
+							this._orbitSpeedUpgradeLevel,
+							8,
+							8,
+							this._grapnelSpeedUpgradeLevel,
+							8,
+							10,
+							this._grapnelLengthUpgradeLevel,
+							8
+						})
 					};
 					string[] array3 = new string[]
 					{
@@ -235,26 +258,6 @@ public class ShipController : MonoBehaviour
 					});
 					
 					AudioManager.Instance.Play("金币");
-					(from a in Observable.EveryUpdate()
-					where Input.GetKeyDown(KeyCode.Space)
-					select a).Subscribe(delegate(long _)
-					{
-						if (this.money >= 5)
-						{
-							this.fuelValue += 30f;
-							this.money -= 5;
-							AudioManager.Instance.Play("补油");
-						}
-						if (this.money < 5)
-						{
-							(new string[1])[0] = ".";
-							string[] strings = new string[]
-							{
-								"燃料不足，无法补充燃料\n"
-							};
-							this.showText.ShowTexts(strings);
-						}
-					}).AddTo(this._enableLifetime);
 					this.startButton.onClick.AddListener(delegate()
 					{
 						this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关on");
@@ -285,6 +288,8 @@ public class ShipController : MonoBehaviour
 
 	private void OnDisable()
 	{
+		this._stationPurchaseDisposable?.Dispose();
+		this._stationPurchaseDisposable = null;
 		this._enableLifetime?.Dispose();
 		this._enableLifetime = null;
 	}
@@ -375,7 +380,8 @@ public class ShipController : MonoBehaviour
 	// Token: 0x0600005F RID: 95 RVA: 0x00003870 File Offset: 0x00001A70
 	private void ShipRotate()
 	{
-		this.orbitRadius = Quaternion.AngleAxis(Time.deltaTime * this.orbitSpeed, Vector3.forward) * this.orbitRadius;
+		float num = this.orbitSpeed * this.GetOrbitSpeedMultiplier();
+		this.orbitRadius = Quaternion.AngleAxis(Time.deltaTime * num, Vector3.forward) * this.orbitRadius;
 		base.transform.position = this._centerPoint + this.orbitRadius;
 	}
 
@@ -407,6 +413,148 @@ public class ShipController : MonoBehaviour
 		{
 			return this.isInSapceShip;
 		}
+	}
+
+	private float GetOrbitSpeedMultiplier()
+	{
+		return 1f + 0.06f * (float)Mathf.Min(this._orbitSpeedUpgradeLevel, 8);
+	}
+
+	private void RefreshGrapnelUpgrades()
+	{
+		if (this._grapnel == null)
+		{
+			return;
+		}
+		this._grapnel.SetLengthUpgradeLevel(this._grapnelLengthUpgradeLevel);
+		this._grapnel.SetGrapnelAnimSpeedLevel(this._grapnelSpeedUpgradeLevel);
+	}
+
+	private void RegisterStationPurchaseInputs()
+	{
+		this._stationPurchaseDisposable?.Dispose();
+		this._stationPurchaseDisposable = new CompositeDisposable();
+		(from a in Observable.EveryUpdate()
+			where Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Alpha3)
+			select a).Subscribe(delegate(long _)
+		{
+			if (!this.isInSapceShip)
+			{
+				return;
+			}
+			if (Input.GetKeyDown(KeyCode.Space))
+			{
+				if (this.money >= 5)
+				{
+					this.fuelValue += 30f;
+					this.money -= 5;
+					AudioManager.Instance.Play("补油");
+					return;
+				}
+				this.showText.ShowTexts(new string[]
+				{
+					"现金不足，无法补充燃料（需要5$）\n"
+				});
+				return;
+			}
+			if (Input.GetKeyDown(KeyCode.Alpha1))
+			{
+				this.TryBuyOrbitSpeedUpgrade();
+				return;
+			}
+			if (Input.GetKeyDown(KeyCode.Alpha2))
+			{
+				this.TryBuyGrapnelSpeedUpgrade();
+				return;
+			}
+			if (Input.GetKeyDown(KeyCode.Alpha3))
+			{
+				this.TryBuyGrapnelLengthUpgrade();
+			}
+		}).AddTo(this._stationPurchaseDisposable);
+	}
+
+	private void TryBuyOrbitSpeedUpgrade()
+	{
+		if (this._orbitSpeedUpgradeLevel >= 8)
+		{
+			this.showText.ShowTexts(new string[]
+			{
+				"轨道环绕速度已达最高等级。\n"
+			});
+			return;
+		}
+		if (this.money < 8)
+		{
+			this.showText.ShowTexts(new string[]
+			{
+				"现金不足，无法购买轨道速度升级（需要8$）。\n"
+			});
+			return;
+		}
+		this.money -= 8;
+		this._orbitSpeedUpgradeLevel++;
+		AudioManager.Instance.Play("金币");
+		this.showText.ShowTexts(new string[]
+		{
+			string.Format("已升级轨道环绕速度，当前等级：{0}/8。\n", this._orbitSpeedUpgradeLevel)
+		});
+	}
+
+	private void TryBuyGrapnelSpeedUpgrade()
+	{
+		if (this._grapnelSpeedUpgradeLevel >= 8)
+		{
+			this.showText.ShowTexts(new string[]
+			{
+				"钩爪速度已达最高等级。\n"
+			});
+			return;
+		}
+		if (this.money < 8)
+		{
+			this.showText.ShowTexts(new string[]
+			{
+				"现金不足，无法购买钩爪速度升级（需要8$）。\n"
+			});
+			return;
+		}
+		this.money -= 8;
+		this._grapnelSpeedUpgradeLevel++;
+		this.RefreshGrapnelUpgrades();
+		AudioManager.Instance.Play("金币");
+		this.showText.ShowTexts(new string[]
+		{
+			string.Format("已升级钩爪伸出/回收速度，当前等级：{0}/8。\n", this._grapnelSpeedUpgradeLevel)
+		});
+	}
+
+	private void TryBuyGrapnelLengthUpgrade()
+	{
+		if (this._grapnelLengthUpgradeLevel >= 8)
+		{
+			this.showText.ShowTexts(new string[]
+			{
+				"钩爪长度已达最高等级。\n"
+			});
+			return;
+		}
+		if (this.money < 10)
+		{
+			this.showText.ShowTexts(new string[]
+			{
+				"现金不足，无法购买钩爪长度升级（需要10$）。\n"
+			});
+			return;
+		}
+		this.money -= 10;
+		this._grapnelLengthUpgradeLevel++;
+		this.RefreshGrapnelUpgrades();
+		AudioManager.Instance.Play("金币");
+		this.showText.ShowTexts(new string[]
+		{
+			string.Format("已升级钩爪长度，当前等级：{0}/8。\n", this._grapnelLengthUpgradeLevel)
+		});
 	}
 
 	// Token: 0x06000060 RID: 96 RVA: 0x000038C0 File Offset: 0x00001AC0
@@ -589,4 +737,12 @@ public class ShipController : MonoBehaviour
 
 	// Token: 0x04000058 RID: 88
 	private bool isInSapceShip;
+
+	private GrapnelController _grapnel;
+
+	private int _orbitSpeedUpgradeLevel;
+
+	private int _grapnelSpeedUpgradeLevel;
+
+	private int _grapnelLengthUpgradeLevel;
 }

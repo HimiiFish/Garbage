@@ -147,7 +147,7 @@ public class ShowText : MonoBehaviour
 					this._skipCurrentDialogue = false;
 					break;
 				}
-				if (strings[i].Contains(","))
+				if (strings[i] == ",")
 				{
 					yield return StartCoroutine(this.WaitSkippable(1f));
 					if (this._skipCurrentDialogue)
@@ -156,7 +156,7 @@ public class ShowText : MonoBehaviour
 						break;
 					}
 				}
-				else if (strings[i].Contains("."))
+				else if (strings[i] == ".")
 				{
 					this._textMeshPro.text = "";
 					AudioManager.Instance.PlaySFXWithRandomPitch("打字", 0.8f, 1.2f);

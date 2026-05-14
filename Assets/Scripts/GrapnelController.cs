@@ -12,12 +12,23 @@ public class GrapnelController : MonoBehaviour
 	private void Awake()
 	{
 		this.lineRenderer = base.GetComponent<LineRenderer>();
+		this._baseGrapnelRadius = this.grapnelRadius;
+		this._ship = base.GetComponentInParent<ShipController>();
 	}
 
 	// Token: 0x0600003F RID: 63 RVA: 0x00002F1E File Offset: 0x0000111E
 	private void Start()
 	{
 		this._isCrawl = false;
+		if (this._ship == null)
+		{
+			this._ship = base.GetComponentInParent<ShipController>();
+		}
+	}
+
+	private bool IsDockedAtStation()
+	{
+		return this._ship != null && this._ship.IsDockedInStation;
 	}
 
 	// Token: 0x06000040 RID: 64 RVA: 0x00002F28 File Offset: 0x00001128
@@ -25,15 +36,15 @@ public class GrapnelController : MonoBehaviour
 	{
 		this._centerPoint = this.grapnelPoint.transform.position;
 		base.transform.rotation = Quaternion.LookRotation(Vector3.forward, this._centerPoint - base.transform.position);
-		if (!this._isCrawl)
+		if (!this._isCrawl && !this.IsDockedAtStation())
 		{
 			this.GrapnelRotate();
 		}
-		if (Input.GetMouseButtonDown(0) && !this._isCrawl)
+		if (Input.GetMouseButtonDown(0) && !this._isCrawl && !this.IsDockedAtStation())
 		{
 			this._isCrawl = true;
 			Vector3 a = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-			this.GrapnelLogic((a - this._centerPoint).normalized, 10);
+			this.GrapnelLogic((a - this._centerPoint).normalized, this.GetShotReachDistance());
 		}
 		this.lineRenderer.SetPosition(0, this._centerPoint);
 		this.lineRenderer.SetPosition(1, base.transform.position);
@@ -76,9 +87,10 @@ public class GrapnelController : MonoBehaviour
 		AudioManager.Instance.Play("狗爪伸出去");
 		float time = 0f;
 		Vector3 fixedDistanceVector = targetVector * (float)distance;
+		float extendStep = 0.5f * this._grapnelAnimSpeedMul;
 		while (time < 1f && Vector3.Distance(base.transform.position, this._centerPoint + fixedDistanceVector) > 0.5f)
 		{
-			time += Time.deltaTime / 2f;
+			time += Time.deltaTime * extendStep;
 			base.transform.position = Vector3.Lerp(base.transform.position, this._centerPoint + fixedDistanceVector, time);
 			yield return null;
 		}
@@ -90,11 +102,11 @@ public class GrapnelController : MonoBehaviour
 		{
 			if (this._isGrab)
 			{
-				recoveryTime += Time.deltaTime / (200f * this._grabbedMass);
+				recoveryTime += Time.deltaTime / (200f * this._grabbedMass) * this._grapnelAnimSpeedMul;
 			}
 			else
 			{
-				recoveryTime += Time.deltaTime / (50f * this._grabbedMass);
+				recoveryTime += Time.deltaTime / (50f * this._grabbedMass) * this._grapnelAnimSpeedMul;
 			}
 			base.transform.position = Vector3.Lerp(base.transform.position, this._centerPoint, recoveryTime);
 			yield return null;
@@ -127,11 +139,47 @@ public class GrapnelController : MonoBehaviour
 		yield break;
 	}
 
-	// Token: 0x06000045 RID: 69 RVA: 0x0000310C File Offset: 0x0000130C
+	public void SetLengthUpgradeLevel(int level)
+	{
+		this._lengthUpgradeLevel = Mathf.Max(0, level);
+		this.ApplyGrapnelRadiusFromLevel();
+	}
+
+	public void SetGrapnelAnimSpeedLevel(int level)
+	{
+		this._speedUpgradeLevel = Mathf.Max(0, level);
+		this._grapnelAnimSpeedMul = Mathf.Clamp(1f + 0.12f * (float)this._speedUpgradeLevel, 1f, 2.4f);
+	}
+
+	private int GetShotReachDistance()
+	{
+		return 10 + this._lengthUpgradeLevel * 2;
+	}
+
+	private void ApplyGrapnelRadiusFromLevel()
+	{
+		float num = this._baseGrapnelRadius.magnitude;
+		if (num < 1E-05f)
+		{
+			this.grapnelRadius = this._baseGrapnelRadius;
+			return;
+		}
+		float num2 = num * (1f + 0.07f * (float)this._lengthUpgradeLevel);
+		this.grapnelRadius = this._baseGrapnelRadius.normalized * num2;
+	}
+
 	private void OnTriggerEnter2D(Collider2D other)
 	{
+		if (this.IsDockedAtStation())
+		{
+			return;
+		}
 		if (other.CompareTag("Garbage") && this._isCrawl)
 		{
+			if (this._isGrab)
+			{
+				return;
+			}
 			this._isGrab = true;
 			Garabage garabage = other.GetComponent<Garabage>();
 			this._grabbedMass = garabage != null ? Mathf.Clamp(garabage.RuntimeMass, 0.35f, 6f) : 1f;
@@ -160,6 +208,16 @@ public class GrapnelController : MonoBehaviour
 	private bool _isGrab;
 
 	private float _grabbedMass = 1f;
+
+	private Vector3 _baseGrapnelRadius;
+
+	private int _lengthUpgradeLevel;
+
+	private int _speedUpgradeLevel;
+
+	private float _grapnelAnimSpeedMul = 1f;
+
+	private ShipController _ship;
 
 	// Token: 0x0400002F RID: 47
 	[SerializeField]
