@@ -9,31 +9,37 @@ using UnityEngine;
 using UnityEngine.UI;
 using Random = UnityEngine.Random;
 
-// Token: 0x02000019 RID: 25
 public class ShipController : MonoBehaviour
 {
 	private CompositeDisposable _enableLifetime;
 
 	private CompositeDisposable _stationPurchaseDisposable;
 
-	// Token: 0x06000058 RID: 88 RVA: 0x000034BC File Offset: 0x000016BC
 	private void Start()
 	{
+		this.EnsureCampaignManager();
 		this._grapnel = base.GetComponentInChildren<GrapnelController>(true);
 		this.RefreshGrapnelUpgrades();
 		this.index = -1;
 		this.isInSapceShip = true;
 		this._centerPoint = new Vector3(0f, 0f, 0f);
-		MessageBroker.Default.Receive<GarbageCollectedMessage>().Subscribe(delegate(GarbageCollectedMessage _)
+		this.ApplyCampaignPhase(CampaignManager.CurrentPhase);
+		MessageBroker.Default.Receive<GarbageCollectedMessage>().Subscribe(delegate(GarbageCollectedMessage msg)
 		{
 			if (this.isInSapceShip)
 			{
 				return;
 			}
+			this.money += Mathf.Max(0, msg.MoneyAwarded);
 			this.garbageCount++;
 			if (this.garbageCount >= this.garbageCountMax)
 			{
 				this.garbageCount = this.garbageCountMax;
+				this.SetCargoFullPendingDock(true);
+				if (CampaignManager.Instance != null)
+				{
+					CampaignManager.Instance.NotifyFullCargoCollected();
+				}
 				string[] strings = new string[]
 				{
 					"."
@@ -92,7 +98,8 @@ public class ShipController : MonoBehaviour
 				"",
 				"搜集垃圾:\n" + this.garbageCount.ToString() + "/" + this.garbageCountMax.ToString()
 			};
-			array[0] = list[num][0];
+			string bonus = msg.MoneyAwarded > 0 ? "\n获得现金 " + msg.MoneyAwarded.ToString() + "$。\n" : "\n";
+			array[0] = list[num][0] + bonus;
 			this.showText.ShowTexts(array);
 		}).AddTo(this);
 	}
@@ -100,10 +107,11 @@ public class ShipController : MonoBehaviour
 	public void ApplyFlyingVisualState()
 	{
 		base.transform.DOKill(false);
-		base.transform.SetParent(null);
+		base.transform.SetParent(null, true);
 		base.transform.localScale = Vector3.one;
 		this.isInSapceShip = false;
 		this.SetDockedVisuals(false);
+		this.orbitRadius = base.transform.position - this._centerPoint;
 	}
 
 	private void SetDockedVisuals(bool docked)
@@ -128,146 +136,313 @@ public class ShipController : MonoBehaviour
 		}
 	}
 
+	private void CompleteStationLaunch()
+	{
+		if (this.spaceStation == null)
+		{
+			return;
+		}
+		base.transform.DOKill(false);
+		Vector3 worldPos = this.spaceStation.transform.position;
+		base.transform.SetParent(null, true);
+		base.transform.position = worldPos;
+		this.orbitRadius = worldPos - this._centerPoint;
+		base.transform.DOScale(Vector3.one, 0.1f);
+		this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关on");
+		this.isInSapceShip = false;
+		this.SetDockedVisuals(false);
+		StaticData.BeginOrbitalMotion(this._centerPoint);
+		if (CampaignManager.Instance != null)
+		{
+			CampaignManager.Instance.OnLaunchedFromStation();
+		}
+		else if (GenerateManager.Instance != null)
+		{
+			GenerateManager.Instance.BeginNewOutingSpawn();
+		}
+	}
+
+	public void SetCargoFullPendingDock(bool value)
+	{
+		this._cargoFullPendingDock = value;
+	}
+
+	public void ApplyCampaignPhase(GameCampaignPhase phase)
+	{
+		this.garbageCountMax = CampaignManager.GarbagePerTrip;
+		if (phase == GameCampaignPhase.Tutorial)
+		{
+			this._orbitSpeedUpgradeLevel = 0;
+			this._grapnelSpeedUpgradeLevel = 0;
+			this._grapnelLengthUpgradeLevel = 0;
+			this.RefreshGrapnelUpgrades();
+		}
+	}
+
+	public void PrepareForCampaignPhaseStart(GameCampaignPhase phase)
+	{
+		this.ApplyCampaignPhase(phase);
+		this.garbageCount = 0;
+		this._cargoFullPendingDock = false;
+		this._stationLevelCompletePending = false;
+		this.isOver = false;
+		this.fuelValue = this.fuelValueMax;
+		if (this.spaceStation != null)
+		{
+			base.transform.SetParent(this.spaceStation.transform, true);
+			base.transform.localScale = Vector3.zero;
+			this.isInSapceShip = true;
+			this.SetDockedVisuals(true);
+		}
+	}
+
+	public void ShowPhaseIntroAfterTransition(GameCampaignPhase phase)
+	{
+		string body;
+		switch (phase)
+		{
+		case GameCampaignPhase.UpgradeMission:
+			body = "第二关：完成两次清运任务。\n第一次回站后可使用现金升级飞船。\n收集满10块垃圾后靠港，按回车发射。";
+			break;
+		case GameCampaignPhase.Endless:
+			body = "第三关：无尽清运。\n空间站会持续补充轨道垃圾，尽可能多赚取现金并升级。";
+			break;
+		default:
+			body = "教学关：用钩爪收集10块垃圾后返回空间站。";
+			break;
+		}
+		this.showText.ShowTexts(new string[]
+		{
+			".",
+			body
+		}, delegate
+		{
+			this.BindStationLaunchControls(false);
+		});
+	}
+
+	public void QueueStationDialogueForCampaign(bool levelCompleteAfterLaunch)
+	{
+		this._stationLevelCompletePending = levelCompleteAfterLaunch;
+		this.BindStationLaunchControls(levelCompleteAfterLaunch);
+		if (this.index == -1)
+		{
+			this.index++;
+			this.showText.PlayConfigText("text/TestText", null);
+			return;
+		}
+		if (CampaignManager.CurrentPhase == GameCampaignPhase.Tutorial)
+		{
+			string[] tutorialEnd = levelCompleteAfterLaunch ? new string[]
+			{
+				".",
+				"教学任务完成！\n你已掌握移动、钩爪与回站。\n按回车键进入下一关。"
+			} : new string[]
+			{
+				".",
+				"欢迎，同志。\n用钩爪收集轨道上的10块垃圾，集满后飞回空间站靠港。"
+			};
+			this.showText.ShowTexts(tutorialEnd);
+			return;
+		}
+		if (CampaignManager.CurrentPhase == GameCampaignPhase.UpgradeMission)
+		{
+			if (levelCompleteAfterLaunch)
+			{
+				this.showText.ShowTexts(new string[]
+				{
+					".",
+					"两次作业已全部完成！\n按回车键进入无尽清运关卡。"
+				});
+				return;
+			}
+			int outing = CampaignManager.Level2CompletedOutings;
+			if (outing == 1)
+			{
+				string[] upgradePages = new string[]
+				{
+					string.Format("\n第一次回站成功！\n按下空格键消耗5现金补充燃料\n按数字键1：轨道环绕速度升级（{0}$，当前Lv{1}/{2}）", 8, this._orbitSpeedUpgradeLevel, 8),
+					string.Format("按数字键2：钩爪伸出/回收速度升级（{0}$，当前Lv{1}/{2}）", 8, this._grapnelSpeedUpgradeLevel, 8),
+					string.Format("按数字键3：钩爪长度升级（{0}$，当前Lv{1}/{2}，增加伸出距离与待机半径）\n完成第二次作业后再回站", 10, this._grapnelLengthUpgradeLevel, 8)
+				};
+				string stationBody = "欢迎回来，同志。\n本轮可升级飞船，然后出发完成第二次清运。\n\n" + string.Join("\n", upgradePages) + "\n\n 赚取10金币";
+				this.showText.ShowTexts(new string[]
+				{
+					".",
+					stationBody
+				});
+				return;
+			}
+			this.showText.ShowTexts(new string[]
+			{
+				".",
+				"欢迎回来，同志。\n第二次作业：再收集10块垃圾后返回空间站。"
+			});
+			return;
+		}
+		this.ShowEndlessStationDialogue();
+	}
+
+	private void ShowEndlessStationDialogue()
+	{
+		List<string[]> list = new List<string[]>
+		{
+			new string[]
+			{
+				"第一次来哈同志.\n我是空间站的小张。",
+				"干一天幸苦了吧，来吃个月饼过个中秋。\n 这个空间站里你可以补充燃料或者启动推进器将飞船推向更高的轨道。"
+			},
+			new string[]
+			{
+				"欢迎回来，同志。"
+			},
+			new string[]
+			{
+				"你太棒了同志，等回地球了我一定要请你吃一顿。"
+			},
+			new string[]
+			{
+				"欢迎回来，你已经完成了这个月指标的一半了。"
+			},
+			new string[]
+			{
+				"哈哈，今年月球基地的模范标兵非你莫属。"
+			},
+			new string[]
+			{
+				"调动？你才来多久啊同志。\n要想想我们可是在为人类文明的环境做贡献呢！"
+			},
+			new string[]
+			{
+				"听吧新征程~号角吹响。。。。。。"
+			},
+			new string[]
+			{
+				"其实我们也很想出于人道主义去对美国宇航员进行救援。\n但是美国早在2011年就提出了沃尔沃条款来中止了我们和他们的一切太空技术合作",
+				"太空的景色很美不是吗？但我还是会想念我老家黄土高原\n我来太空站时那里还是一望无尽的荒野呢，就像这太空一样。"
+			}
+		};
+		if (this.index >= 7)
+		{
+			this.index = 0;
+		}
+		this.index++;
+		string[] upgradePages = new string[]
+		{
+			string.Format("\n按下空格键消耗5现金补充燃料\n按数字键1：轨道环绕速度升级（{0}$，当前Lv{1}/{2}，每级约+6%环绕角速度）", 8, this._orbitSpeedUpgradeLevel, 8),
+			string.Format("按数字键2：钩爪伸出/回收速度升级（{0}$，当前Lv{1}/{2}）", 8, this._grapnelSpeedUpgradeLevel, 8),
+			string.Format("按数字键3：钩爪长度升级（{0}$，当前Lv{1}/{2}，增加伸出距离与待机半径）\n按下回车键发射", 10, this._grapnelLengthUpgradeLevel, 8)
+		};
+		string[] dialoguePages = list[this.index];
+		string fullDialogue = string.Join("\n\n", dialoguePages);
+		string fullTips = string.Join("\n", upgradePages);
+		string stationBody = fullDialogue + "\n\n" + fullTips + "\n\n 赚取10金币";
+		this.showText.ShowTexts(new string[]
+		{
+			".",
+			stationBody
+		});
+	}
+
+	private void BindStationLaunchControls(bool levelCompleteAfterLaunch)
+	{
+		this._launchInputDisposable?.Dispose();
+		this._launchInputDisposable = new CompositeDisposable();
+		this.startButton.gameObject.SetActive(true);
+		string hint = levelCompleteAfterLaunch ? "\n按回车键完成本关并进入下一阶段" : CampaignManager.UpgradesEnabledAtStation ? "\n文本显示完毕，按下回车键Launch发射飞船\n（停靠期间可按空格补燃料，按1/2/3购买升级；方向键←→可翻阅前几屏对话）" : "\n文本显示完毕，按下回车键Launch发射飞船\n（教学关：按W/S变轨，鼠标左键使用钩爪）";
+		this.showText.ShowTexts(new string[]
+		{
+			hint
+		});
+		(from a in Observable.EveryUpdate()
+			where Input.GetKeyDown(KeyCode.Return)
+			select a).Subscribe(delegate(long _)
+		{
+			if (this._stationLevelCompletePending && CampaignManager.Instance != null)
+			{
+				CampaignManager.Instance.TryCompleteLevelAfterStationDialogue();
+				return;
+			}
+			this.CompleteStationLaunch();
+		}).AddTo(this._launchInputDisposable);
+		this.startButton.onClick.RemoveAllListeners();
+		this.startButton.onClick.AddListener(delegate()
+		{
+			if (this._stationLevelCompletePending && CampaignManager.Instance != null)
+			{
+				CampaignManager.Instance.TryCompleteLevelAfterStationDialogue();
+				return;
+			}
+			this.CompleteStationLaunch();
+		});
+	}
+
+	private void HandleStationDocked()
+	{
+		this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关off");
+		base.transform.parent = this.spaceStation.transform;
+		base.transform.DOScale(Vector3.zero, 0.1f);
+		this.SetDockedVisuals(true);
+		this.money += 10;
+		this.garbageCount = 0;
+		bool returnedFromOuting = this._cargoFullPendingDock;
+		this._cargoFullPendingDock = false;
+		if (!returnedFromOuting)
+		{
+			this.startButton.gameObject.SetActive(false);
+			if (this.index == -1)
+			{
+				this.index++;
+				this.showText.PlayConfigText("text/TestText", delegate
+				{
+					this.BindStationLaunchControls(false);
+				});
+			}
+			else
+			{
+				this.BindStationLaunchControls(false);
+			}
+			return;
+		}
+		if (CampaignManager.IsEndlessMode())
+		{
+			MessageBroker.Default.Publish<GenerateGarbageMessage>(new GenerateGarbageMessage());
+			this.QueueStationDialogueForCampaign(false);
+		}
+		else if (CampaignManager.Instance != null)
+		{
+			CampaignManager.Instance.OnStationDockedAfterFullCargo();
+		}
+		else
+		{
+			this.QueueStationDialogueForCampaign(false);
+		}
+		if (CampaignManager.UpgradesEnabledAtStation && (CampaignManager.IsEndlessMode() || CampaignManager.Level2CompletedOutings >= 1))
+		{
+			this.RegisterStationPurchaseInputs();
+		}
+		AudioManager.Instance.Play("金币");
+	}
+
 	// Token: 0x06000059 RID: 89 RVA: 0x000034FC File Offset: 0x000016FC
 	private void OnEnable()
 	{
+		this.EnsureCampaignManager();
 		this._enableLifetime?.Dispose();
 		this._enableLifetime = new CompositeDisposable();
 		this._stationPurchaseDisposable?.Dispose();
 		this._stationPurchaseDisposable = null;
 		this.orbitRadius = base.transform.position - this._centerPoint;
-		this.ObserveEveryValueChanged((ShipController v) => v.isInSapceShip, FrameCountType.Update, false).Subscribe(delegate(bool _)
+		this.ObserveEveryValueChanged((ShipController v) => v.isInSapceShip, FrameCountType.Update, false).Subscribe(delegate(bool docked)
 		{
-			if (this.isInSapceShip)
+			if (docked)
 			{
-				this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关off");
-				base.transform.parent = this.spaceStation.transform;
-				base.transform.DOScale(Vector3.zero, 0.1f);
-				this.SetDockedVisuals(true);
-				this.money += 10;
-				this.garbageCount = 0;
-				MessageBroker.Default.Publish<GenerateGarbageMessage>(new GenerateGarbageMessage());
-				if (this.index >= 7)
-				{
-					this.index = 0;
-				}
-				
-				Action onLaunchAllowed = delegate() {
-					this.startButton.gameObject.SetActive(true);
-					string[] hint = new string[] { "\n文本显示完毕，按下回车键Launch发射飞船\n（停靠期间可按空格补燃料，按1/2/3购买升级）" };
-					this.showText.ShowTexts(hint);
-					
-					(from a in Observable.EveryUpdate()
-						where Input.GetKeyDown(KeyCode.Return)
-						select a).Subscribe(delegate(long _)
-					{
-						this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关on");
-						base.transform.parent = null;
-						base.transform.position = this.spaceStation.transform.position;
-						base.transform.DOScale(1f, 0.1f);
-						this.isInSapceShip = false;
-						this.SetDockedVisuals(false);
-					}).AddTo(this);
-					
-					// To clean up the listener upon launching:
-					// Note: Since we are recreating it and it isn't cleaned up normally,
-					// a better pattern is required, but let's stick to the simplest one to achieve the input key
-				};
-
-				this.startButton.gameObject.SetActive(false); // Hide the button while text plays and waits for enter
-
-				this.RegisterStationPurchaseInputs();
-
-				if (this.index == -1)
-				{
-					this.index++;
-					this.showText.PlayConfigText("text/TestText", delegate() {
-						onLaunchAllowed();
-					});
-				}
-				else 
-				{
-					string[] array = new string[]
-					{
-						"."
-					};
-					List<string[]> list = new List<string[]>
-					{
-						new string[]
-						{
-							"第一次来哈同志.\n我是空间站的小张。\n 干一天幸苦了吧，来吃个月饼过个中秋。\n 这个空间站里你可以补充燃料或者启动推进器将飞船推向更高的轨道。"
-						},
-						new string[]
-						{
-							"欢迎回来，同志。"
-						},
-						new string[]
-						{
-							"你太棒了同志，等回地球了我一定要请你吃一顿。"
-						},
-						new string[]
-						{
-							"欢迎回来，你已经完成了这个月指标的一半了。"
-						},
-						new string[]
-						{
-							"哈哈，今年月球基地的模范标兵非你莫属。"
-						},
-						new string[]
-						{
-							"调动？你才来多久啊同志。\n要想想我们可是在为人类文明的环境做贡献呢！"
-						},
-						new string[]
-						{
-							"听吧新征程~号角吹响。。。。。。"
-						},
-						new string[]
-						{
-							"其实我们也很想出于人道主义去对美国宇航员进行救援。\n但是美国早在2011年就提出了沃尔沃条款来中止了我们和他们的一切太空技术合作\n太空的景色很美不是吗？但我还是会想念我老家黄土高原\n我来太空站时那里还是一望无尽的荒野呢，就像这太空一样。"
-						}
-					};
-					this.index++;
-					string[] array2 = new string[]
-					{
-						string.Format("\n按下空格键消耗5现金补充燃料\n按数字键1：轨道环绕速度升级（{0}$，当前Lv{1}/{2}，每级约+6%环绕角速度）\n按数字键2：钩爪伸出/回收速度升级（{3}$，当前Lv{4}/{5}）\n按数字键3：钩爪长度升级（{6}$，当前Lv{7}/{8}，增加伸出距离与待机半径）\n按下回车键发射", new object[]
-						{
-							8,
-							this._orbitSpeedUpgradeLevel,
-							8,
-							8,
-							this._grapnelSpeedUpgradeLevel,
-							8,
-							10,
-							this._grapnelLengthUpgradeLevel,
-							8
-						})
-					};
-					string[] array3 = new string[]
-					{
-						"",
-						"",
-						"",
-						"\n 赚取10金币"
-					};
-					array3[0] = array[0];
-					array3[1] = list[this.index][0];
-					array3[2] = array2[0];
-					
-					this.showText.ShowTexts(array3, delegate() {
-						onLaunchAllowed();
-					});
-					
-					AudioManager.Instance.Play("金币");
-					this.startButton.onClick.AddListener(delegate()
-					{
-						this.startButton.GetComponent<Image>().sprite = Resources.Load<Sprite>("Sprites/主界面+控制台+结局（缺少标题）/控制台/开关on");
-						base.transform.parent = null;
-						base.transform.position = this.spaceStation.transform.position;
-						base.transform.DOScale(1f, 0.1f);
-						this.isInSapceShip = false;
-						this.SetDockedVisuals(false);
-					});
-				} // End of else block
+				this.HandleStationDocked();
+			}
+			else
+			{
+				this._launchInputDisposable?.Dispose();
+				this._launchInputDisposable = null;
 			}
 		}).AddTo(this._enableLifetime);
 		this.ObserveEveryValueChanged((ShipController v) => v.fuelValue, FrameCountType.Update, false).Subscribe(delegate(float _)
@@ -290,11 +465,22 @@ public class ShipController : MonoBehaviour
 	{
 		this._stationPurchaseDisposable?.Dispose();
 		this._stationPurchaseDisposable = null;
+		this._launchInputDisposable?.Dispose();
+		this._launchInputDisposable = null;
 		this._enableLifetime?.Dispose();
 		this._enableLifetime = null;
 	}
 
-	// Token: 0x0600005A RID: 90 RVA: 0x00003598 File Offset: 0x00001798
+	private void EnsureCampaignManager()
+	{
+		if (CampaignManager.Instance != null)
+		{
+			return;
+		}
+		GameObject go = new GameObject("CampaignManager");
+		go.AddComponent<CampaignManager>();
+	}
+
 	private void Update()
 	{
 		this.moneyText.text = this.money.ToString() + "$";
@@ -316,7 +502,6 @@ public class ShipController : MonoBehaviour
 		this.ShipFace();
 	}
 
-	// Token: 0x0600005B RID: 91 RVA: 0x00003614 File Offset: 0x00001814
 	private void ShipFace()
 	{
 		if (Input.GetKey(this.downKey))
@@ -333,7 +518,6 @@ public class ShipController : MonoBehaviour
 		}
 	}
 
-	// Token: 0x0600005C RID: 92 RVA: 0x000036E8 File Offset: 0x000018E8
 	private void ChangeOrbit(KeyCode key, float changeCoefficient)
 	{
 		if (Input.GetKeyDown(key))
@@ -365,23 +549,20 @@ public class ShipController : MonoBehaviour
 		}
 	}
 
-	// Token: 0x0600005D RID: 93 RVA: 0x00003845 File Offset: 0x00001A45
 	private void UpOrbit()
 	{
 		this.ChangeOrbit(this.upKey, this.changeOrbitCoefficient);
 	}
 
-	// Token: 0x0600005E RID: 94 RVA: 0x00003859 File Offset: 0x00001A59
 	private void DownOrbit()
 	{
 		this.ChangeOrbit(this.downKey, -this.changeOrbitCoefficient);
 	}
 
-	// Token: 0x0600005F RID: 95 RVA: 0x00003870 File Offset: 0x00001A70
 	private void ShipRotate()
 	{
 		float num = this.orbitSpeed * this.GetOrbitSpeedMultiplier();
-		this.orbitRadius = Quaternion.AngleAxis(Time.deltaTime * num, Vector3.forward) * this.orbitRadius;
+		this.orbitRadius = Quaternion.AngleAxis(StaticData.OrbitAngularDirectionSign * Time.deltaTime * num, Vector3.forward) * this.orbitRadius;
 		base.transform.position = this._centerPoint + this.orbitRadius;
 	}
 
@@ -557,7 +738,6 @@ public class ShipController : MonoBehaviour
 		});
 	}
 
-	// Token: 0x06000060 RID: 96 RVA: 0x000038C0 File Offset: 0x00001AC0
 	private void ComputeOrbitSpeed()
 	{
 		this.orbitSpeed = Mathf.Sqrt(this.plant.gravityCoefficient / this.orbitRadius.magnitude);
@@ -567,7 +747,6 @@ public class ShipController : MonoBehaviour
 		}
 	}
 
-	// Token: 0x06000061 RID: 97 RVA: 0x00003920 File Offset: 0x00001B20
 	private void ComputeFuelValue()
 	{
 		if (!Input.GetKey(this.upKey) && !Input.GetKey(this.downKey))
@@ -579,7 +758,6 @@ public class ShipController : MonoBehaviour
 		this.fuelValue -= this.fuelConsumptionRate * Time.deltaTime;
 	}
 
-	// Token: 0x06000062 RID: 98 RVA: 0x0000398C File Offset: 0x00001B8C
 	private void ComputeCameraSize()
 	{
 		float endValue = this.orbitRadius.magnitude * 1.2f;
@@ -589,7 +767,6 @@ public class ShipController : MonoBehaviour
 		Camera.main.transform.DOMove(endValue2, 0.05f, false).SetEase(Ease.InOutSine);
 	}
 
-	// Token: 0x06000063 RID: 99 RVA: 0x00003A22 File Offset: 0x00001C22
 	private void CorrectAcceleration()
 	{
 		if (this.acceleration < 0f)
@@ -598,7 +775,6 @@ public class ShipController : MonoBehaviour
 		}
 	}
 
-	// Token: 0x06000064 RID: 100 RVA: 0x00003A3C File Offset: 0x00001C3C
 	private void DrawCircle(Vector3 center, float radius)
 	{
 		LineRenderer component = base.GetComponent<LineRenderer>();
@@ -615,7 +791,6 @@ public class ShipController : MonoBehaviour
 		}
 	}
 
-	// Token: 0x06000065 RID: 101 RVA: 0x00003AD0 File Offset: 0x00001CD0
 	private void OnTriggerEnter2D(Collider2D other)
 	{
 		if (other.CompareTag("Garbage"))
@@ -633,109 +808,82 @@ public class ShipController : MonoBehaviour
 		}
 	}
 
-	// Token: 0x0400003E RID: 62
 	[SerializeField]
 	private KeyCode upKey;
 
-	// Token: 0x0400003F RID: 63
 	[SerializeField]
 	private KeyCode downKey;
 
-	// Token: 0x04000040 RID: 64
 	[Header("轨道半径")]
 	[SerializeField]
 	private Vector3 orbitRadius;
 
-	// Token: 0x04000041 RID: 65
 	[Header("轨道速度")]
 	[SerializeField]
 	private float orbitSpeed;
 
-	// Token: 0x04000042 RID: 66
 	[Header("加速度")]
 	[SerializeField]
 	private float acceleration;
 
-	// Token: 0x04000043 RID: 67
 	[Header("最大加速度")]
 	[SerializeField]
 	private float maxAcceleration;
 
-	// Token: 0x04000044 RID: 68
 	[Header("跃度")]
 	[SerializeField]
 	private float leap;
 
-	// Token: 0x04000045 RID: 69
 	[Header("星球")]
 	[SerializeField]
 	private Plant plant;
 
-	// Token: 0x04000046 RID: 70
 	[Header("燃料值")]
 	[SerializeField]
 	public float fuelValue;
 
-	// Token: 0x04000047 RID: 71
 	[Header("燃料值上限")]
 	[SerializeField]
 	public float fuelValueMax;
 
-	// Token: 0x04000048 RID: 72
 	[Header("燃料消耗率")]
 	[SerializeField]
 	private float fuelConsumptionRate;
 
-	// Token: 0x04000049 RID: 73
 	[Header("燃料消耗系数")]
 	[SerializeField]
 	private float fuelConsumptionCoefficient;
 
-	// Token: 0x0400004A RID: 74
 	[Header("变轨系数")]
 	[SerializeField]
 	private float changeOrbitCoefficient = 0.1f;
 
-	// Token: 0x0400004B RID: 75
 	public int money;
 
-	// Token: 0x0400004C RID: 76
 	public ParticleSystem fog1;
 
-	// Token: 0x0400004D RID: 77
 	public ParticleSystem fog2;
 
-	// Token: 0x0400004E RID: 78
 	private Vector3 _centerPoint;
 
-	// Token: 0x0400004F RID: 79
 	public int garbageCount;
 
-	// Token: 0x04000050 RID: 80
 	public int garbageCountMax = 10;
 
-	// Token: 0x04000051 RID: 81
 	public ShowText showText;
 
-	// Token: 0x04000052 RID: 82
 	private bool isUp = true;
 
-	// Token: 0x04000053 RID: 83
 	public SpaceStation spaceStation;
 
-	// Token: 0x04000054 RID: 84
 	public Button startButton;
 
-	// Token: 0x04000055 RID: 85
 	public bool isOver;
 
-	// Token: 0x04000056 RID: 86
 	public TextMeshProUGUI moneyText;
 
-	// Token: 0x04000057 RID: 87
 	private int index;
 
-	// Token: 0x04000058 RID: 88
 	private bool isInSapceShip;
 
 	private GrapnelController _grapnel;
@@ -745,4 +893,10 @@ public class ShipController : MonoBehaviour
 	private int _grapnelSpeedUpgradeLevel;
 
 	private int _grapnelLengthUpgradeLevel;
+
+	private bool _cargoFullPendingDock;
+
+	private bool _stationLevelCompletePending;
+
+	private CompositeDisposable _launchInputDisposable;
 }

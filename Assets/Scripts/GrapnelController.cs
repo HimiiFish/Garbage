@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using DG.Tweening;
 using UniRx;
 using UnityEngine;
@@ -117,23 +118,33 @@ public class GrapnelController : MonoBehaviour
 		this._isGrab = false;
 		this._grabbedMass = 1f;
 		base.transform.GetChild(0).GetComponent<SpriteRenderer>().sprite = Resources.Load<Sprite>("Sprites/狗爪开");
-		MessageBroker.Default.Publish<GarbageCollectedMessage>(new GarbageCollectedMessage());
-		IEnumerator enumerator = base.transform.GetEnumerator();
-		while (enumerator.MoveNext())
+		int pickupMoney = 0;
+		List<Transform> grabbedGarbage = new List<Transform>();
+		foreach (Transform child in base.transform)
 		{
-			object obj = enumerator.Current;
-			Transform transform = (Transform)obj;
-			if (transform.CompareTag("Garbage"))
+			if (!child.CompareTag("Garbage"))
 			{
-				transform.SetParent(null, true);
-				if (GenerateManager.Instance != null)
-				{
-					GenerateManager.Instance.ReleaseGarbage(transform.gameObject);
-				}
-				else
-				{
-					Object.Destroy(transform.gameObject);
-				}
+				continue;
+			}
+			grabbedGarbage.Add(child);
+			Garabage garabage = child.GetComponent<Garabage>();
+			if (garabage != null)
+			{
+				pickupMoney += Mathf.Max(0, garabage.GarbageValue);
+			}
+		}
+		MessageBroker.Default.Publish<GarbageCollectedMessage>(new GarbageCollectedMessage(pickupMoney));
+		for (int i = 0; i < grabbedGarbage.Count; i++)
+		{
+			Transform transform = grabbedGarbage[i];
+			transform.SetParent(null, true);
+			if (GenerateManager.Instance != null)
+			{
+				GenerateManager.Instance.ReleaseGarbage(transform.gameObject);
+			}
+			else
+			{
+				Object.Destroy(transform.gameObject);
 			}
 		}
 		yield break;

@@ -59,14 +59,70 @@ public class GenerateManager : MonoBehaviour
 		}
 	}
 
-	private void Start()
+	public void ApplyCampaignPhase(GameCampaignPhase phase, bool resetCounters)
+	{
+		if (resetCounters)
+		{
+			this.ResetSpawnCounters();
+		}
+	}
+
+	public void ResetSpawnCounters()
 	{
 		this._lifetimeSpawnCount = 0;
 		this._spawnCheckTimer = 0f;
+		if (this.generateData == null)
+		{
+			return;
+		}
 		foreach (GenerateList generateList in this.generateData.generateLists)
 		{
 			generateList.currentGarbageCount = 0;
 		}
+	}
+
+	public void BeginNewOutingSpawn()
+	{
+		this.ResetSpawnCounters();
+		this.FillFieldToCap();
+	}
+
+	public void ClearAllActiveGarbage()
+	{
+		GameObject[] active = GameObject.FindGameObjectsWithTag("Garbage");
+		for (int i = 0; i < active.Length; i++)
+		{
+			if (active[i] != null)
+			{
+				this.ReleaseGarbage(active[i]);
+			}
+		}
+		this.ResetSpawnCounters();
+	}
+
+	private void FillFieldToCap()
+	{
+		if (this.generateData == null)
+		{
+			return;
+		}
+		int guard = 0;
+		foreach (GenerateList generateList in this.generateData.generateLists)
+		{
+			while (generateList.currentGarbageCount < generateList.maxGarbageCount && this.CanSpawnLifetime() && guard < 64)
+			{
+				if (!this.TrySpawnOne(generateList))
+				{
+					break;
+				}
+				guard++;
+			}
+		}
+	}
+
+	private void Start()
+	{
+		this.ResetSpawnCounters();
 		MessageBroker.Default.Receive<GenerateGarbageMessage>().Subscribe(delegate(GenerateGarbageMessage _)
 		{
 			this.GenerateTenGarbage();
@@ -86,6 +142,14 @@ public class GenerateManager : MonoBehaviour
 
 	private void Update()
 	{
+		if (!StaticData.IsOrbitalMotionActive)
+		{
+			return;
+		}
+		if (CampaignManager.Instance != null && !CampaignManager.IsEndlessMode() && this._lifetimeSpawnCount >= this.GetLifetimeSpawnCap())
+		{
+			return;
+		}
 		if (!this.CanSpawnLifetime())
 		{
 			return;
@@ -179,8 +243,8 @@ public class GenerateManager : MonoBehaviour
 		RotateObject ro = instance.GetComponent<RotateObject>();
 		if (ro != null)
 		{
+			ro.PrepareForPool();
 			ro.enabled = true;
-			ro.ClearGarbageOrbitalDecay();
 		}
 		Garabage gb = instance.GetComponent<Garabage>();
 		GameObject prefabKey = gb != null ? gb.PoolPrefabKey : null;
@@ -217,6 +281,11 @@ public class GenerateManager : MonoBehaviour
 			rMin = rMax;
 			rMax = t;
 		}
+		float shipCap = Mathf.Max(0.5f, this.generateData.shipMaxOrbitRadiusForGarbageLayout);
+		float margin = Mathf.Max(0f, this.generateData.garbageSpawnMinMarginAboveShipOrbit);
+		float rMinFromShip = shipCap + margin;
+		rMin = Mathf.Max(rMin, rMinFromShip);
+		rMax = Mathf.Max(rMax, rMin + 0.5f);
 		Vector2 dir2 = Random.insideUnitCircle;
 		if (dir2.sqrMagnitude < 0.0001f)
 		{
@@ -228,7 +297,6 @@ public class GenerateManager : MonoBehaviour
 		GameObject gameObject = this.RentFromPool(generateList.Garbage);
 		gameObject.transform.SetParent(null, true);
 		gameObject.transform.position = spawnPos;
-		gameObject.SetActive(true);
 		Garabage garabage = gameObject.GetComponent<Garabage>();
 		if (garabage != null)
 		{
@@ -242,6 +310,10 @@ public class GenerateManager : MonoBehaviour
 		if (rotateObject != null)
 		{
 			rotateObject.ResetOrbitStateFromWorld();
+		}
+		gameObject.SetActive(true);
+		if (rotateObject != null)
+		{
 			float decaySpeed = Random.Range(this.generateData.garbageDecaySpeedMin, this.generateData.garbageDecaySpeedMax);
 			rotateObject.SetGarbageOrbitalDecay(decaySpeed, this.generateData.garbageDecayRadiusFloor);
 		}

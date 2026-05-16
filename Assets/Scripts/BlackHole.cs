@@ -111,7 +111,7 @@ public class BlackHole : MonoBehaviour
 			this._targetOrbitRadius = Random.Range(this.minOrbitRadius, this.maxOrbitRadius);
 		}
 		float d = Mathf.Lerp(this._orbitRadius.magnitude, this._targetOrbitRadius, Time.deltaTime * this._lerpSpeed);
-		this._orbitRadius = (Quaternion.AngleAxis(Time.deltaTime * this._orbitSpeed * this.holeOrbitAngularScale, Vector3.forward) * this._orbitRadius).normalized * d;
+		this._orbitRadius = (Quaternion.AngleAxis(StaticData.OrbitAngularDirectionSign * Time.deltaTime * this._orbitSpeed * this.holeOrbitAngularScale, Vector3.forward) * this._orbitRadius).normalized * d;
 		base.transform.position = this._centerPoint + this._orbitRadius;
 	}
 

@@ -103,6 +103,7 @@ GameObject:
   - component: {fileID: 222694121525821480}
   - component: {fileID: 114320256170494724}
   - component: {fileID: 114017697238300914}
+  - component: {fileID: 114017697238300915}
   m_Layer: 5
   m_Name: Exit
   m_TagString: Untagged
@@ -808,6 +809,19 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &114017697238300915
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1884547391421755}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c3e8f12b4d59e4a91f0c2d8e6b45f1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  mainMenuSceneName: Menu
 --- !u!224 &224733206282342372
 RectTransform:
   m_ObjectHideFlags: 0

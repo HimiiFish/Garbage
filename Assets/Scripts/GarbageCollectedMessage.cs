@@ -1,6 +1,11 @@
 ﻿using System;
 
-// Token: 0x02000014 RID: 20
 internal class GarbageCollectedMessage
 {
+	public readonly int MoneyAwarded;
+
+	public GarbageCollectedMessage(int moneyAwarded)
+	{
+		this.MoneyAwarded = moneyAwarded;
+	}
 }

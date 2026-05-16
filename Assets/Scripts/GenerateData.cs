@@ -34,7 +34,7 @@ public class GenerateData : ScriptableObject
 	[Tooltip("垃圾沿径向向行星缓慢靠近的最大速度（世界单位/秒）。")]
 	public float garbageDecaySpeedMax = 0.22f;
 
-	[Header("垃圾个体：质量与缩放（影响钩爪回收）")]
+	[Header("垃圾个体：质量与缩放（同一随机因子：质量大则体型大，影响钩爪回收）")]
 	public float garbageMassMin = 0.55f;
 
 	public float garbageMassMax = 2.85f;
@@ -42,6 +42,28 @@ public class GenerateData : ScriptableObject
 	public float garbageUniformScaleMin = 0.65f;
 
 	public float garbageUniformScaleMax = 1.35f;
+
+	[Header("垃圾拾取现金（与质量/体型同向：最轻对应最少，最重对应最多）")]
+	public int garbagePickupMoneyMin = 1;
+
+	public int garbagePickupMoneyMax = 6;
+
+	[Header("垃圾公转角速度（原逻辑为 √(g/r)×2；此处用 global 整体压低，再按体型 t 在轻/重间插值）")]
+	[Tooltip("乘在旧公式 2 倍基础上的总缩放，建议 0.35～0.55")]
+	public float garbageOrbitGlobalMul = 0.42f;
+
+	[Tooltip("最轻垃圾相对 global 的额外倍率（越大转得越快）")]
+	public float garbageOrbitLightMul = 1f;
+
+	[Tooltip("最重垃圾相对 global 的额外倍率（应小于 Light，越大越慢）")]
+	public float garbageOrbitHeavyMul = 0.38f;
+
+	[Header("垃圾与飞船轨道关系")]
+	[Tooltip("设计中飞船可达的最大轨道半径（世界单位）。生成垃圾时实际下限 = max(本资源 garbageSpawnRadiusMin, 该值 + 下方间距)。")]
+	public float shipMaxOrbitRadiusForGarbageLayout = 15f;
+
+	[Tooltip("垃圾生成半径下限相对「飞船最大轨道参考」的额外间距，保证垃圾环整体高于飞船活动带。")]
+	public float garbageSpawnMinMarginAboveShipOrbit = 2f;
 
 	public List<GenerateList> generateLists;
 }

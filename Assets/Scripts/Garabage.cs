@@ -17,6 +17,16 @@ public class Garabage : MonoBehaviour
 
 	private float _runtimeMass = 1f;
 
+	private float _orbitAngularFactor = 2f;
+
+	public float OrbitAngularFactor
+	{
+		get
+		{
+			return this._orbitAngularFactor;
+		}
+	}
+
 	public float RuntimeMass
 	{
 		get
@@ -38,14 +48,35 @@ public class Garabage : MonoBehaviour
 		{
 			return;
 		}
-		this._runtimeMass = Random.Range(data.garbageMassMin, data.garbageMassMax);
-		float uniformScale = Random.Range(data.garbageUniformScaleMin, data.garbageUniformScaleMax);
+		float t = Random.Range(0f, 1f);
+		this._runtimeMass = Mathf.Lerp(data.garbageMassMin, data.garbageMassMax, t);
+		float uniformScale = Mathf.Lerp(data.garbageUniformScaleMin, data.garbageUniformScaleMax, t);
 		base.transform.localScale = Vector3.one * uniformScale;
 		Rigidbody2D rb = base.GetComponent<Rigidbody2D>();
 		if (rb != null)
 		{
 			rb.mass = this._runtimeMass;
 		}
+		int minM = data.garbagePickupMoneyMin;
+		int maxM = data.garbagePickupMoneyMax;
+		if (maxM < minM)
+		{
+			int swap = minM;
+			minM = maxM;
+			maxM = swap;
+		}
+		this.GarbageValue = Mathf.RoundToInt(Mathf.Lerp((float)minM, (float)maxM, t));
+		this.GarbageValue = Mathf.Max(0, this.GarbageValue);
+		float gMul = data.garbageOrbitGlobalMul > 0.0001f ? data.garbageOrbitGlobalMul : 0.42f;
+		float light = data.garbageOrbitLightMul > 0.0001f ? data.garbageOrbitLightMul : 1f;
+		float heavy = Mathf.Max(0.05f, data.garbageOrbitHeavyMul);
+		if (heavy > light)
+		{
+			float swap = light;
+			light = heavy;
+			heavy = swap;
+		}
+		this._orbitAngularFactor = 2f * gMul * Mathf.Lerp(light, heavy, t);
 		this.ApplyRandomSpriteOnce();
 	}
 
@@ -129,5 +160,6 @@ public class Garabage : MonoBehaviour
 
 	public string GarbageName;
 
+	[Tooltip("生成时按质量写入：钩爪回收结算时加给玩家的现金")]
 	public int GarbageValue;
 }

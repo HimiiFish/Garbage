@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b60f3926ea6eb2446b861c27dd76802b, type: 3}
   m_Name: GenerateData
   m_EditorClassIdentifier: 
-  allowInfiniteRefill: 1
+  allowInfiniteRefill: 0
   maxLifetimeSpawns: 0
   spawnCheckInterval: 0.45
   garbageSpawnRadiusMin: 22
@@ -24,6 +24,13 @@ MonoBehaviour:
   garbageMassMax: 2.85
   garbageUniformScaleMin: 0.65
   garbageUniformScaleMax: 1.35
+  garbagePickupMoneyMin: 1
+  garbagePickupMoneyMax: 6
+  garbageOrbitGlobalMul: 0.42
+  garbageOrbitLightMul: 1
+  garbageOrbitHeavyMul: 0.38
+  shipMaxOrbitRadiusForGarbageLayout: 15
+  garbageSpawnMinMarginAboveShipOrbit: 2
   generateLists:
   - Garbage: {fileID: 1709254077376921, guid: e71435c879d091e419a7123ee4f1db31, type: 3}
     maxGarbageCount: 10
